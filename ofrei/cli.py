@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 
-from tvn import *
+from tvn import TYPE_WRITE, TYPE_MKDIR, TYPE_DELETE
+from tvn import replay_changes, fetch_latest_revision, fetch_revisions
 import argparse
 import os
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-#from ofrei.steam import *
+from ofrei.steam import getpath
+from ofrei.common import get_installed_revision, get_remote
 from pathlib import Path
 from sys import exit, stderr
 from shutil import copy,rmtree
 import httpx
+import sys
 
 parser = argparse.ArgumentParser(description="Manage Open Fortress installation.")
 parser.add_argument("action", type=str, help='action to execute on a directory, currently only "upgrade"')
 parser.add_argument("directory", type=str, help='a directory to install it to.')
-parser.add_argument("-u", default="http://toast.openfortress.fun/toast/", help="url to fetch data from")
+parser.add_argument("-u", default=get_remote(Path(getpath())), help="url to fetch data from")
 parser.add_argument("-c", default="4", help="no. of threads")
 args = parser.parse_args()
 
@@ -32,7 +35,8 @@ print(installed_revision, "->", latest_revision, file=stderr)
 revisions = fetch_revisions(args.u, installed_revision, latest_revision)
 changes = replay_changes(revisions)
 
-
+(game_path / ".tvn" / "remote").touch(0o777)
+(game_path / ".tvn" / "remote").write_text(args.u)
 
 writes = list(filter(lambda x: x["type"] == TYPE_WRITE, changes))
 executor = ThreadPoolExecutor(int(args.c))
@@ -48,7 +52,10 @@ def work(x):
 
 #futures = {executor.submit(work, x): x for x in writes}
 try:
-    os.remove(game_path / ".revision")
+    os.rename(
+        game_path / ".revision",
+        game_path / ".tvn" / "revision"
+    )
 except FileNotFoundError:
     pass
 
@@ -72,5 +79,5 @@ for x in writes:
         futures[executor.submit(work, x)] = x
 for x in as_completed(futures):
     print('WRITE ' + futures[x]["path"])
-(game_path / ".revision").touch(0o777)
-(game_path / ".revision").write_text(str(latest_revision))
+(game_path / ".tvn" / "revision").touch(0o777)
+(game_path / ".tvn" / "revision").write_text(str(latest_revision))

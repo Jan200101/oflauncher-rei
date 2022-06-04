@@ -1,10 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
-from steam import *
+from ofrei.steam import getpath, sdk_download
+from ofrei.common import get_installed_revision, get_remote
 from sys import exit
 from tvn import *
 import httpx
 import traceback
+import json
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QApplication, QMessageBox, QFileDialog
@@ -92,7 +94,7 @@ class Ui_MainWindow(object):
         self.browse.setText(_translate("MainWindow", "Browse"))
         self.lineEdit.setText(_translate("MainWindow", "GAMEDIR"))
         self.label_2.setText(_translate("MainWindow", "Download URL"))
-        self.lineEdit_2.setText(_translate("MainWindow", "https://toast.openfortress.fun/toast/"))
+        self.lineEdit_2.setText(_translate("MainWindow", get_remote(Path(getpath()))))
         self.pushButton.setText(_translate("MainWindow", "Update"))
         self.pushButton_2.setText(_translate("MainWindow", "Cancel"))
         self.label_3.setText(_translate("MainWindow", "Installed Revision: None"))
@@ -146,10 +148,22 @@ class Ui_MainWindow(object):
             revisions = fetch_revisions(url, installed_revision, latest_revision)
             changes = replay_changes(revisions)
             writes = list(filter(lambda x: x["type"] == TYPE_WRITE, changes))
-            client = httpx.Client(headers={'user-agent': 'Mozilla/5.0', 'Connection': 'keep-alive', 'Cache-Control': 'max-age=0'})
+            client = httpx.Client(headers={'user-agent': 'Mozilla/5.0 oflauncher-rei', 'Connection': 'keep-alive', 'Cache-Control': 'max-age=0'})
             todl = [[url + "objects/" + x["object"], game_path / x["path"], client] for x in writes]
+
             try:
-                os.remove(game_path / ".revision")
+                (game_path / ".tvn").mkdir()
+            except FileExistsError:
+                pass
+
+            (game_path / ".tvn" / "remote").touch(0o777)
+            (game_path / ".tvn" / "remote").write_text(self.lineEdit_2.text())
+
+            try:
+                os.rename(
+                    game_path / ".revision",
+                    game_path / ".tvn" / "revision"
+                )
             except FileNotFoundError:
                 pass
 
@@ -179,8 +193,8 @@ class Ui_MainWindow(object):
                         app.processEvents()
                 if missing == False:
                     done = True
-            (game_path / ".revision").touch(0o777)
-            (game_path / ".revision").write_text(str(latest_revision))
+            (game_path / ".tvn" / "revision").touch(0o777)
+            (game_path / ".tvn" / "revision").write_text(str(latest_revision))
             exitMsg = QMessageBox()
             exitMsg.setWindowTitle("OFToast")
             exitMsg.setText("Done!")
